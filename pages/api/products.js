@@ -1,40 +1,40 @@
-import {mongooseConnect} from "@/lib/mongoose";
 import {Product} from "@/models/Product";
+import { mongooseConnect } from "@/lib/mongoose";
+import { isAdminRequest } from "./auth/[...nextauth]";
 
-export default async function handle(req, res) {
-  await mongooseConnect();
-  const {categories, sort, phrase, ...filters} = req.query;
-  let [sortField, sortOrder] = (sort || '_id-desc').split('-');
 
-  const productsQuery = {};
+export default async function handle( req, res) {
+    const {method} = req;
+    await mongooseConnect();
+    await isAdminRequest(req,res);
 
-    // Add category filter to the query
-  if (categories) {
-    productsQuery.category = categories.split(',');
-  }
 
-    // Add search phrase filter to the query
-  if (phrase) {
-    productsQuery['$or'] = [
-      {title:{$regex:phrase,$options:'i'}},
-      {description:{$regex:phrase,$options:'i'}},
-    ];
-  }
+    if (method === 'GET') {
+        if (req.query?.id) {
+            res.json(await Product.findOne({_id:req.query.id}));
+        } else {
+            res.json(await Product.find());
+        }
+    }
 
-    // Add custom filters to the query
-  if (Object.keys(filters).length > 0) {
-    Object.keys(filters).forEach(filterName => {
-      productsQuery['properties.'+filterName] = filters[filterName];
-    });
-  }
-  console.log(productsQuery);
+    if (method === 'POST') {
+        const {title,description,price,images,category} = req.body;
+        const productDoc = await Product.create({
+            title,description,price,images,category,
+        })
+        res.json(productDoc);
+    }
 
-    // Fetch products from the database based on the constructed query
-  res.json(await Product.find(
-    productsQuery,
-    null,
-    {
-      sort:{[sortField]:sortOrder==='asc' ? 1 : -1}
-    })
-  );
+    if (method === 'PUT') {
+        const {title,description,price,images,category,_id} = req.body;
+        await Product.updateOne({_id}, {title,description,price,images,category});
+        res.json(true);
+    }
+
+    if (method === 'DELETE') {
+        if (req.query?.id) {
+            await Product.deleteOne({_id:req.query?.id});
+            res.json(true);
+        }
+    }
 }
